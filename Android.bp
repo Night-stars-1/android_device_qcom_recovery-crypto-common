@@ -1,0 +1,18 @@
+// SPDX-License-Identifier: Apache-2.0
+// Qualcomm Recovery crypto sources shared by device profiles.
+// Vendor library names and service packaging remain device-owned.
+soong_namespace {}
+
+// Resolve paths here, before defaults are inherited in a device directory.
+filegroup {
+    name: "qcom_recovery_crypto_auth_srcs",
+    srcs: ["auth_service.cpp"],
+    visibility: ["//visibility:public"],
+}
+
+cc_defaults {
+    name: "qcom_recovery_crypto_auth_sources",
+    srcs: ["//device/qcom/recovery-crypto-common:qcom_recovery_crypto_auth_srcs"],
+    cflags: ["-Wall", "-Wextra", "-Werror"],
+    visibility: ["//visibility:public"],
+}

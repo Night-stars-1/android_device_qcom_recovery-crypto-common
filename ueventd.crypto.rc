@@ -1,0 +1,15 @@
+# Security-only subset of the reviewed common ueventd configuration.
+subsystem dma_heap
+    devname uevent_devpath
+    dirname /dev/dma_heap
+
+subsystem mem_buf_vm
+    devname uevent_devpath
+    dirname /dev/mem_buf_vm
+
+/dev/qseecom                  0660 system drmrpc
+/dev/ion                      0664 system system
+/dev/membuf                   0664 system system
+/dev/mem_buf_vm/*              0444 system system
+/dev/dma_heap/qcom,*           0444 system system
+/dev/0:0:0:49476               0600 system system

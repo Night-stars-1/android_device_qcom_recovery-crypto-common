@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: Apache-2.0
+# Compiled only into Recovery; no permissive domain or normal-system changes.
+recovery_only(`
+  # fscrypt v2 tracks key users in a keyring created with Recovery credentials.
+  # GET_ENCRYPTION_KEY_STATUS searches it after ADD_ENCRYPTION_KEY succeeds.
+  allow recovery self:key search;
+
+  # Partition image flashing invalidates cached blocks for read-back checks.
+  # Recovery already has block access; this grants only the required ioctl.
+  allowxperm recovery { dev_type -apex_dm_device }:blk_file ioctl BLKFLSBUF;
+  # Check available memory before creating the sealed partition image copy.
+  allow recovery proc_meminfo:file { open read getattr };
+
+  # Binder-only clients. hal_client_domain also grants passthrough membership
+  # in Recovery, which inherits writable vendor-data rules for Gatekeeper.
+  typeattribute recovery halclientdomain;
+  typeattribute recovery hal_keymint_client;
+  typeattribute recovery hal_gatekeeper_client;
+  allow recovery { hal_secureclock_service hal_sharedsecret_service }:service_manager find;
+  allow vendor_hal_keymint_qti { hal_secureclock_service hal_sharedsecret_service }:service_manager { add find };
+  allow vendor_hal_gatekeeper_qti hal_sharedsecret_service:service_manager { add find };
+  # SharedSecret is paired with the KeyMint server attribute by the platform.
+  # The standard macro also supplies hal_keymint and halserverdomain membership.
+  hal_server_domain(vendor_hal_gatekeeper_qti, hal_keymint)
+  binder_use(vendor_hal_gatekeeper_qti)
+  allow vendor_hal_gatekeeper_qti self:process setrlimit;
+  binder_call(recovery, vendor_hal_gatekeeper_qti)
+  passthrough_hal_client_domain(vendor_hal_gatekeeper_qti, hal_keymaster)
+
+  # QTI passthrough objects stay in a vendor HAL domain, not coredomain Recovery.
+  get_prop(vendor_hal_gatekeeper_qti, vendor_default_prop)
+  get_prop(vendor_hal_gatekeeper_qti, vendor_soc_name_prop)
+  allow vendor_hal_gatekeeper_qti tee_device:chr_file rw_file_perms;
+  allow vendor_hal_gatekeeper_qti { vendor_dmabuf_qseecom_heap_device vendor_dmabuf_qseecom_ta_heap_device }:chr_file r_file_perms;
+  allow vendor_hal_gatekeeper_qti ion_device:chr_file rw_file_perms;
+  allow vendor_hal_gatekeeper_qti dmabuf_system_heap_device:chr_file r_file_perms;
+
+  # Services and their dependencies are ramdisk files rather than /vendor ELFs.
+  r_dir_file(vendor_hal_keymint_qti, rootfs)
+  r_dir_file(tee, rootfs)
+  r_dir_file(vendor_hal_gatekeeper_qti, rootfs)
+  allow { vendor_hal_keymint_qti vendor_hal_gatekeeper_qti tee } rootfs:file { execute map };
+  # Init uses explicit contexts for these signed-ramdisk services, matching the
+  # Recovery health service. Immutable executable relabeling stays forbidden.
+  domain_trans(init, rootfs, tee)
+  domain_trans(init, rootfs, vendor_hal_keymint_qti)
+  domain_trans(init, rootfs, vendor_hal_gatekeeper_qti)
+  r_dir_file(vendor_hal_gatekeeper_qti, firmware_file)
+  r_dir_file(vendor_hal_keymint_qti, firmware_file)
+  r_dir_file(recovery, firmware_file)
+  allow vendor_hal_keymint_qti vendor_dmabuf_qseecom_ta_heap_device:chr_file r_file_perms;
+
+  # Key and database access is read-only. No enrolling, fixing or rewriting keys.
+  r_dir_file(recovery, metadata_file)
+  r_dir_file(recovery, system_data_file)
+  r_dir_file(recovery, system_data_root_file)
+  r_dir_file(recovery, system_userdir_file)
+  r_dir_file(recovery, unencrypted_data_file)
+  # These labels are private to vold/keystore in normal Android. The generic
+  # helper adds opt-in Recovery-only READ exceptions and retains write bans.
+  allow recovery { vold_metadata_file vold_data_file keystore_data_file }:dir { open read getattr search };
+  allow recovery { vold_metadata_file vold_data_file keystore_data_file }:file { open read getattr map };
+  # OpenDirectory opens every parent of /data/media/0 with O_RDONLY.
+  # /data/media has a distinct label; the platform grants only search there.
+  allow recovery media_userdir_file:dir { open read getattr search };
+  r_dir_file(recovery, media_rw_data_file)
+  allow recovery { system_data_file system_data_root_file system_userdir_file media_rw_data_file }:dir ioctl;
+  allowxperm recovery { system_data_file system_data_root_file system_userdir_file media_rw_data_file }:dir ioctl { 0x6616 0x6617 0x661a };
+')
